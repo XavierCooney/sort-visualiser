@@ -1,0 +1,1033 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sort Visualiser</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
+            padding: 10px;
+        }
+        #opt-panel {
+            border-radius: 15px;
+            border: 1px solid black;
+            padding: 10px;
+            margin: 10px;
+        }
+        label, button {
+            display: block;
+            margin: 10px;
+        }
+        select {
+            padding: 6px;
+        }
+        #err-pane {
+            margin: 15px;
+            padding: 15px;
+            border-radius: 15px;
+            border: 3px red solid; 
+        }
+        #err-pane:empty {
+            display: none;
+        }
+        #operation-btns {
+            border-radius: 15px;
+            border: 1px solid black;
+            padding: 6px;
+            margin: 10px;
+        }
+        #operation-btns button {
+            display: inline;
+        }
+        #canv-container {
+            display: flex;
+            justify-content: center;
+        }
+        #canv {
+            margin: 10px;
+            border: 1px solid black;
+            width: 90%;
+            border-radius: 3px;
+        }
+        pre#prog-code-listing {
+            counter-reset: line;
+            padding: 30px;
+            background-color: #EEE;
+            line-height: 150%;
+            border-radius: 25px;
+            float: left;
+            min-width: 68%;
+        }
+        #prog-info {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-around;
+            align-content: stretch;
+            flex-basis: max-content;
+        }
+        #prog-desk-check {
+            flex-grow: 3;
+            margin: 15px;
+            border-collapse: collapse;
+            border: 2px solid #222;
+        }
+        #prog-desk-check th, td {
+            border: 1px solid #888;
+            padding: 7px 5px;
+            text-align: center;
+        }
+        #prog-desk-check caption {
+            padding-top: 30px;
+        }
+        pre#prog-code-listing code {
+            flex-grow: 7;
+            counter-increment: line;
+            display: block;
+            padding: 3px;
+        }
+        pre#prog-code-listing code::before {
+            content: counter(line) ". ";
+            -webkit-user-select: none;
+        }
+        pre#prog-code-listing:empty {
+            display: none;
+        }
+        .active-line {
+            background-color: #FF0;
+        }
+        #stats-info {
+            border: 1px solid black;
+            padding: 6px;
+            border-radius: 6px;
+            margin: 4px;
+        }
+        #stats-info.sort-fail {
+            background-color: #F008;
+        }
+        #stats-info.sort-succuss {
+            background-color: #0F08;
+        }
+    </style>
+</head>
+<body>
+    <h1 style="text-align: center;">Xavier's Sorting Algorithm Visualiser</h1>
+    <div id="opt-panel">
+        <label>
+            Sorting Algorithm
+            <select id="slct-sort-algo">
+                <optgroup label="NESA Specified">
+                    <option data-opt="insertion">Insertion</option>
+                    <option data-opt="bubble">Bubble</option>
+                    <option data-opt="selection">Selection</option>
+                </optgroup>
+                <optgroup label="n ⋅ log n average">
+                    <option data-opt="quick">Quick</option>
+                    <option data-opt="quick-good-pivot">Quick (better pivot)</option>
+                    <option data-opt="heap">Heap</option>
+                </optgroup>
+                <optgroup label="Other/Weird">
+                    <option data-opt="shell">Shell</option>
+                    <option data-opt="cocktail">Cocktail</option>
+                    <option data-opt="bogo">Bogo</option>
+                </optgroup>
+            </select>
+        </label>
+        <label>
+            Sort Speed
+            <input type="range" min="0" max="10" id="speed-slider" value="6">
+        </label>
+        <label>
+            Num Elements
+            <input type="number" min="2" max="1500" value="15" id="array-len">
+        </label>
+        <label>
+            Initial Values
+            <select id="slct-initial-value">
+                <option data-opt="permutation">Random Permutation</option>
+                <option data-opt="rand">Random in range</option>
+                <option data-opt="sort">Sorted</option>
+                <option data-opt="reverse">Reversed</option>
+                <option data-opt="custom">Custom</option>
+            </select>
+        </label>
+        <button id="go-btn">
+            Begin
+        </button>
+    </div>
+    <div id="operation-btns" style="display: none; position: sticky; top: 10px; background-color: #FFF;">
+        <button id="toggle-pause-btn"></button>
+        <button id="step-btn">Step</button>
+        <button id="reset-btn">Reset</button>
+
+        <span id="stats-info"></span>
+    </div>
+    <div id="err-pane"></div>
+    <div id="canv-container">
+        <canvas id="canv" align="right"></canvas>
+    </div>
+    <div id="prog-info" style="display: none;">
+        <pre id="prog-code-listing"></pre>
+        <table id="prog-desk-check">
+            <caption>Desk Check</caption>
+            <tr id="desk-check-header">
+                <th>Name</th>
+                <th>Value</th>
+            </tr>
+        </table>
+    </div>
+<script>
+    'use strict';
+    /** @type {HTMLCanvasElement} */
+    const canv = document.getElementById('canv');
+    const WIDTH = 1000;
+    const HEIGHT = 250;
+    canv.width = WIDTH;
+    canv.height = HEIGHT;
+
+    const ctx = canv.getContext('2d');
+
+    const STAGE_SETUP = 'setup';
+    const STAGE_PAUSED = 'paused';
+    const STAGE_EXECUTE = 'exec';
+    const STAGE_DONE = 'done';
+    const STAGE_COMPARE = 'comp';
+    const STAGE_SWAP = 'swap';
+
+    const PROGRAMS = {
+        'insertion': `
+' Insertion Sort
+
+Set i = 1
+While i < length(arr)
+    Set j = i
+    While j > 0 And arr[j - 1] > arr[j]
+        Swap arr[j] with arr[j - 1]
+        Set j = j - 1
+    EndWhile
+    Set i = i + 1
+EndWhile
+`,
+        'bubble': `
+' Bubble Sort
+Set continue_looping = true
+While continue_looping
+    Set has_swapped = false
+    Set i = 1
+    While i < length(arr)
+        If arr[i - 1] > arr[i]
+            ' If the current pair is unordered,
+            ' bubble it up!
+            Swap arr[i] with arr[i - 1]
+            Set has_swapped = true
+        EndIf
+        Set i = i + 1
+    EndWhile
+    Set continue_looping = has_swapped
+EndWhile
+`,
+        'selection': `
+' Selection Sort
+Set i = 0
+While i < length(arr)
+    Set lowerst_index_so_far = i
+    Set j = i + 1
+    While j < length(arr)
+        If arr[j] < arr[lowerst_index_so_far]
+            ' We've found a new minimum!
+            Set lowerst_index_so_far = j
+        EndIf
+        Set j = j + 1
+    EndWhile
+    Swap arr[lowerst_index_so_far] with arr[i]
+    Set i = i + 1
+EndWhile
+`,
+        'heap': `
+' Heapsort
+Set count = length(arr)
+
+' First thing is to heapify
+Set start = floor((count - 2) / 2)
+
+While start >= 0
+    Set end = count - 1
+
+    Set root = start
+    Set not_done = true
+    While 2 * root + 1 <= end And not_done
+        Set child = 2 * root + 1
+        Set swap = root
+        If arr[swap] < arr[child]
+            Set swap = child
+        EndIf
+        If child + 1 <= end And arr[swap] < arr[child + 1]
+            Set swap = child + 1
+        EndIf
+        If swap == root
+            Set not_done = false
+        EndIf
+        If swap != root
+            Swap arr[root] with arr[swap]
+            Set root = swap
+        EndIf
+    EndWhile
+
+    Set start = start - 1
+EndWhile
+
+
+Set end = count - 1
+While end > 0
+    Swap arr[end] with arr[0]
+    Set end = end - 1
+    Set start = 0
+
+    Set root = start
+    Set not_done = true
+    While 2 * root + 1 <= end And not_done
+        Set child = 2 * root + 1
+        Set swap = root
+        If arr[swap] < arr[child]
+            Set swap = child
+        EndIf
+        If child + 1 <= end And arr[swap] < arr[child + 1]
+            Set swap = child + 1
+        EndIf
+        If swap == root
+            Set not_done = false
+        EndIf
+        If swap != root
+            Swap arr[root] with arr[swap]
+            Set root = swap
+        EndIf
+    EndWhile
+EndWhile
+`,
+        'shell': `
+' Shellsort, with gaps from Marcin Ciura's 2001 paper
+' 301, 132, 57, 23, 10, 4, 1
+
+Set gap_num = 0
+While gap_num <= 6
+    If gap_num == 0
+        Set gap = 301
+    EndIf
+    If gap_num == 1
+        Set gap = 132
+    EndIf
+    If gap_num == 2
+        Set gap = 57
+    EndIf
+    If gap_num == 3
+        Set gap = 23
+    EndIf
+    If gap_num == 4
+        Set gap = 10
+    EndIf
+    If gap_num == 5
+        Set gap = 4
+    EndIf
+    If gap_num == 6
+        Set gap = 1
+    EndIf
+
+    Set i = gap
+    While i < length(arr)
+        Set j = i
+        While j >= gap And arr[j - gap] > arr[j]
+            Swap arr[j] with arr[j - gap]
+            Set j = j - gap
+        EndWhile
+        Set i = i + 1
+    EndWhile
+
+    Set gap_num = gap_num + 1
+EndWhile
+`,
+        'quick': `
+' Quick sort, with Lomuto partition scheme
+Create auxiliary array
+
+Append to the auxiliary array 0
+Append to the auxiliary array length(arr) - 1
+
+While length(auxiliary array) > 0
+    Remove the last element from the auxiliary array and place it into end
+    Remove the last element from the auxiliary array and place it into start
+
+    If start < end
+        Set i = start
+        Set j = start
+        While j < end
+            If arr[j] < arr[end]
+                Swap arr[i] with arr[j]
+                Set i = i + 1
+            EndIf
+            Set j = j + 1
+        EndWhile
+        Swap arr[i] with arr[end]
+
+        Append to the auxiliary array start
+        Append to the auxiliary array i - 1
+        Append to the auxiliary array i + 1
+        Append to the auxiliary array end
+    EndIf
+EndWhile
+`,
+        'cocktail': `
+' Cocktail shaker sort
+
+Set continue_looping = true
+Set start = 0
+Set end = length(arr) - 2
+
+While start <= end
+    Set new_end = start
+    Set new_start = end
+    
+    Set i = start
+    While i <= end
+        If arr[i] > arr[i + 1]
+            Swap arr[i] with arr[i + 1]
+            Set new_end = i
+        EndIf
+        Set i = i + 1
+    EndWhile
+    Set end = new_end - 1
+
+    Set i = end
+    While i >= start
+        If arr[i] > arr[i + 1]
+            Swap arr[i] with arr[i + 1]
+            ' Increase NewStart (now JobSeeker)!
+            Set new_start = i
+        EndIf
+        Set i = i - 1
+    EndWhile
+    Set start = new_start + 1
+EndWhile
+`,
+        'quick-good-pivot': `
+' Quick sort, with startmuto partition scheme, and median-of-three pivot
+Create auxiliary array
+
+Append to the auxiliary array 0
+Append to the auxiliary array length(arr) - 1
+
+While length(auxiliary array) > 0
+    Remove the last element from the auxiliary array and place it into end
+    Remove the last element from the auxiliary array and place it into start
+
+    If start < end
+        Set i = start
+        Set j = start
+
+        Set mid = floor((start + end) / 2)
+        If arr[mid] < arr[start]
+            Swap arr[start] with arr[mid]
+        EndIf
+        If arr[end] < arr[start]
+            Swap arr[start] with arr[end]
+        EndIf
+        If arr[mid] < arr[end]
+            Swap arr[mid] with arr[end]
+        EndIf
+
+        While j < end
+            If arr[j] < arr[end]
+                Swap arr[i] with arr[j]
+                Set i = i + 1
+            EndIf
+            Set j = j + 1
+        EndWhile
+        Swap arr[i] with arr[end]
+
+        Append to the auxiliary array start
+        Append to the auxiliary array i - 1
+        Append to the auxiliary array i + 1
+        Append to the auxiliary array end
+    EndIf
+EndWhile
+`,
+        'bogo': `
+' Bogo Sort, with Fisher-Yates shuffling
+
+Set continue_looping = true
+
+While continue_looping
+    Set is_sorted = true
+    Set i = 0
+    While is_sorted And i < length(arr) - 1
+        If arr[i] > arr[i + 1]
+            Set is_sorted = false
+        EndIf
+        Set i = i + 1
+    EndWhile
+
+    If is_sorted
+        Set continue_looping = false
+    EndIf
+
+    If continue_looping
+        Set i = length(arr) - 1
+        While i > 0
+            Set j = rand_int(0, i + 1)
+            Swap arr[i] with arr[j]
+            Set i = i - 1
+        EndWhile
+    EndIf
+EndWhile
+`
+    };
+
+    let state = {
+        stage: STAGE_SETUP
+    };
+
+    function update_stage(new_stage) {
+        state.stage = new_stage;
+
+        for(let el of document.getElementById('opt-panel').querySelectorAll('option, select, input, button')) {
+            el.disabled = new_stage != STAGE_SETUP;
+        }
+
+        document.getElementById('step-btn').disabled = new_stage != STAGE_PAUSED;
+
+        document.getElementById('operation-btns').style.display = new_stage == STAGE_SETUP ? 'none' : '';
+        document.getElementById('toggle-pause-btn').innerText = new_stage == STAGE_PAUSED ? 'Start' : 'Pause';
+
+        if(new_stage == STAGE_PAUSED) {
+            state.needs_pausing = false;
+        }
+
+        if(new_stage == STAGE_SETUP) {
+            document.getElementById('prog-info').style.display = 'none';
+            document.getElementById('prog-code-listing').innerText = "";
+            document.getElementById('err-pane').innerText = "";
+        } else {
+            document.getElementById('prog-info').style.display = '';
+        }
+        state.last_exec = new Date();
+    }
+    update_stage(STAGE_SETUP);
+
+    function rand_int(lower, upper) {
+        // Random integer between [lower, upper) (inclusive, exclusive)
+        return Math.floor((Math.random() * (upper - lower)) + lower);
+    }
+
+    function assert(condition, description) {
+        if(!condition) {
+            let msg = `Internal error: ${description || 'unknown'}`;
+            document.getElementById('err-pane').innerText = msg;
+            alert(msg);
+            throw new Error(msg);
+        }
+    }
+
+    function display_in_err_box(msg) {
+        document.getElementById('err-pane').innerText = msg;
+    }
+    function prog_err(msg) {
+        display_in_err_box(`Error in program: ${msg}`);
+        state.needs_pausing = true;
+    }
+
+    function parse_eval_expr(expr, callback) {
+        let match;
+        if(/^[0-9]+$/.test(expr)) {
+            callback(parseInt(expr));
+        } else if(/^length\(arr\)$/.test(expr)) {
+            callback(state.arr.length);
+        } else if(/^length\(auxiliary array\)$/.test(expr)) {
+            if(!('[auxiliary array]' in state.prog_vars)) {
+                display_in_err_box("Auxiliary hasn't been created, cannot read length");
+            } else {
+                callback(state.prog_vars['[auxiliary array]'].length);
+            }
+        } else if(/^true$/.test(expr)) {
+            callback(true);
+        } else if(/^false$/.test(expr)) {
+            callback(false);
+        } else if(/^[a-z_]+$/.test(expr)) {
+            if(expr in state.prog_vars) {
+                callback(state.prog_vars[expr]);
+            } else {
+                prog_err(`Unknown or undeclared variable: ${expr}`);
+            }
+        } else if(match = /^((?:(?!and).)*) and (.*)$/.exec(expr)) {
+            parse_eval_expr(match[1], v_1 => {
+                assert(typeof v_1 == "boolean");
+                if(v_1) {
+                    parse_eval_expr(match[2], v_2 => {
+                        assert(typeof v_2 == "boolean");
+                        callback(v_2);
+                    });
+                } else {
+                    callback(false);
+                }
+            });
+        } else if(match = /^\(([^)]*)\)$/.exec(expr)) {
+            parse_eval_expr(match[1], callback);
+        } else if(match = /^floor\(\(([^)]*)\) \/ 2\)$/.exec(expr)) {
+            parse_eval_expr(match[1], v => {
+                callback(Math.floor(v / 2));
+            });
+        } else if(match = /^rand_int\(([^,]*), ([^)]*)\)$/.exec(expr)) {
+            parse_eval_expr(match[1], v_1 => {
+                parse_eval_expr(match[2], v_2 => {
+                    let x = rand_int(v_1, v_2);
+                    console.log(x);
+                    callback(x);
+                })
+            });
+        } else if(match = /^([0-9]+) \* ([a-z_]+) \+ ([0-9]+)$/.exec(expr)) {
+            parse_eval_expr(match[1], v_1 => {
+                parse_eval_expr(match[2], v_2 => {
+                    parse_eval_expr(match[3], v_3 => {
+                        callback(v_1 * v_2 + v_3);
+                    })
+                })
+            });
+        } else if(match = /^arr\[([^\]]*)\] ([<>]) arr\[([^\]]*)\]$/.exec(expr)) {
+            parse_eval_expr(match[1], v_1 => {
+                parse_eval_expr(match[3], v_2 => {
+                    state.exec_callback = res => {
+                        state.stats.comps++;
+                        update_stage(STAGE_EXECUTE);
+                        callback(res);
+                    }
+                    state.op_index_1 = v_1;
+                    state.op_index_2 = v_2;
+                    state.comp_op = match[2];
+                    update_stage(STAGE_COMPARE);
+                });
+            });
+        } else if(match = /([^<]+) <(=?) (.+)$/.exec(expr)) {
+            parse_eval_expr(match[1], v_1 => {
+                parse_eval_expr(match[3], v_2 => {
+                    callback(v_1 < v_2 || (match[2] == '=' && (v_1 == v_2)));
+                });
+            });
+        } else if(match = /([^>]+) >(=?) (.+)$/.exec(expr)) {
+            parse_eval_expr(match[1], v_1 => {
+                parse_eval_expr(match[3], v_2 => {
+                    callback(v_1 > v_2 || (match[2] == '=' && (v_1 == v_2)));
+                });
+            });
+        } else if(match = /([^=]+) ([!=])= (.+)$/.exec(expr)) {
+            parse_eval_expr(match[1], v_1 => {
+                parse_eval_expr(match[3], v_2 => {
+                    callback((v_1 == v_2) ^ (match[2] == '!'));
+                });
+            });
+        } else if(match = /([^+]+) \+ (.+)$/.exec(expr)) {
+            parse_eval_expr(match[1], v_1 => {
+                parse_eval_expr(match[2], v_2 => {
+                    callback(v_1 + v_2);
+                });
+            });
+        } else if(match = /([^-]+) \- ([a-z_]+)$/.exec(expr)) {
+            parse_eval_expr(match[1], v_1 => {
+                parse_eval_expr(match[2], v_2 => {
+                    callback(v_1 - v_2);
+                });
+            });
+        } else if(match = /([^-]+) \- ([0-9]+)$/.exec(expr)) {
+            parse_eval_expr(match[1], v_1 => {
+                parse_eval_expr(match[2], v_2 => {
+                    callback(v_1 - v_2);
+                });
+            });
+        } else {
+            prog_err(`cannot recognise expression: ${expr}`);
+        }
+    }
+
+    function end_of_exec_line() {
+        if(state.one_step_only) {
+            state.one_step_only = false;
+            update_stage(STAGE_PAUSED);
+        }
+    }
+
+    function frame() {
+        const exec_multiplier = state.stage == STAGE_EXECUTE ? 1 : 5;
+        let time_between_execs_interpolate = (new Date() - state.last_exec) / state.speed_between_execs / exec_multiplier;
+        const next_exec_scheduled = time_between_execs_interpolate > 1.0;
+
+        if(state.stage != STAGE_SETUP) {
+            ctx.fillStyle = '#FFF';
+            ctx.fillRect(0, 0, WIDTH, HEIGHT);
+
+            let width_per_col = WIDTH / state.arr.length;
+            let sliver_width = width_per_col * 0.15;
+
+            for(let i = 0; i < state.arr.length; ++i) {
+                ctx.save();
+                if(state.stage == STAGE_SWAP && (i == state.op_index_1 || i == state.op_index_2)) {
+                    ctx.fillStyle = '#000A';
+                    const DESCENT_TIME = 0.2;
+                    let y_offset = Math.min(DESCENT_TIME, time_between_execs_interpolate);
+                    y_offset -= Math.max(0, Math.min(DESCENT_TIME, time_between_execs_interpolate - 1 + DESCENT_TIME));
+                    y_offset *= 100;
+                    y_offset *= (i == state.op_index_1) ? 1 : -1;
+
+                    let effective_index = i;
+                    if(i == state.op_index_1) {
+                        effective_index += (state.op_index_2 - state.op_index_1) * time_between_execs_interpolate;
+                    } else {
+                        effective_index += (state.op_index_1 - state.op_index_2) * time_between_execs_interpolate;
+                    }
+
+                    let rect_height = state.arr[i] / (state.max_element + 1) * (HEIGHT - 5) + 5;
+                    ctx.fillRect(
+                        effective_index * width_per_col + sliver_width,
+                        HEIGHT - rect_height + y_offset,
+                        width_per_col - 2 * sliver_width, HEIGHT
+                    );
+                } else {
+                    if(state.stage == STAGE_COMPARE && i == state.op_index_1) {
+                        ctx.fillStyle = '#0F0A';
+                    } else if(state.stage == STAGE_COMPARE && i == state.op_index_2) {
+                        ctx.fillStyle = '#00FA';
+                    } else {
+                        ctx.fillStyle = '#000A';
+                    }
+                    let rect_height = state.arr[i] / (state.max_element + 1) * (HEIGHT - 5) + 5;
+                    ctx.fillRect(i * width_per_col + sliver_width, HEIGHT - rect_height, width_per_col - 2 * sliver_width, HEIGHT);
+                }
+                ctx.restore();
+            }
+        } else {
+            ctx.fillStyle = '#DDD';
+            ctx.fillRect(0, 0, WIDTH, HEIGHT);
+        }
+
+        if(state.stage == STAGE_EXECUTE && state.needs_pausing) {
+            update_stage(STAGE_PAUSED);
+        } else if(state.stage == STAGE_EXECUTE && state.line_num >= state.prog_lines.length) {
+            state.needs_pausing = true;
+            state.is_done = true;
+            state.sort_succuss = state.arr.reduce((acc, val) => [acc[0] && acc[1] <= val, val], [true, state.arr[0]])[0];
+            illuminate_prog_lines();
+        } else if(state.stage == STAGE_EXECUTE && next_exec_scheduled) {
+            state.last_exec = new Date();
+            /** @type string */
+            let line_to_execute = state.prog_lines[state.line_num].trim().toLowerCase();
+            state.stats.lines++;
+            let defer_line_increment = false;
+
+            let match;
+            if(line_to_execute.startsWith("'") || line_to_execute.startsWith('//') || /^\s*$/.test(line_to_execute)) {
+                state.stats.lines--; // this lines doesn't really count
+            } else if(match = /^set ([a-z_]+) = (.*)$/.exec(line_to_execute)) {
+                defer_line_increment = true; // just in case there's a comp
+                parse_eval_expr(match[2], v => {
+                    state.prog_vars[match[1]] = v;
+                    state.line_num++;
+                    end_of_exec_line();
+                    illuminate_prog_lines();
+                    update_desk_check();
+                });
+            } else if(match = /^while (.*)$/.exec(line_to_execute)) {
+                defer_line_increment = true;
+                parse_eval_expr(match[1], v => {
+                    if(v) {
+                        state.control_stack.push(state.line_num);
+                        state.line_num++;
+                        end_of_exec_line();
+                        illuminate_prog_lines();
+                    } else {
+                        let num_whiles = 1;
+                        while(num_whiles > 0) {
+                            state.line_num++;
+                            if(state.prog_lines[state.line_num].trim().toLowerCase().startsWith('while ')) {
+                                num_whiles++;
+                            } else if(state.prog_lines[state.line_num].trim().toLowerCase().startsWith('endwhile')) {
+                                num_whiles--;
+                            }
+                        }
+                        state.line_num++;
+                        end_of_exec_line();
+                        illuminate_prog_lines();
+                    }
+                });
+            } else if(match = /^endwhile$/.exec(line_to_execute)) {
+                defer_line_increment = true;
+                state.line_num = state.control_stack.pop();
+                illuminate_prog_lines();
+                end_of_exec_line();
+            } else if(match = /^if (.*)$/.exec(line_to_execute)) {
+                defer_line_increment = true;
+                parse_eval_expr(match[1], v => {
+                    if(v) {
+                        state.line_num++;
+                        illuminate_prog_lines();
+                        end_of_exec_line();
+                    } else {
+                        let num_ifs = 1;
+                        while(num_ifs > 0) {
+                            state.line_num++;
+                            if(state.prog_lines[state.line_num].trim().toLowerCase().startsWith('if ')) {
+                                num_ifs++;
+                            } else if(state.prog_lines[state.line_num].trim().toLowerCase().startsWith('endif')) {
+                                num_ifs--;
+                            }
+                        }
+                        state.line_num++;
+                        illuminate_prog_lines();
+                        end_of_exec_line();
+                    }
+                });
+            } else if(match = /^endif$/.exec(line_to_execute)) {
+                // do nothing
+            } else if(match = /^swap arr\[([^\]]*)\] with arr\[([^\]]*)\]$/.exec(line_to_execute)) {
+                defer_line_increment = true;
+                parse_eval_expr(match[1], index_1 => {
+                    parse_eval_expr(match[2], index_2 => {
+                        state.exec_callback = function() {
+                            state.stats.swaps++;
+                            update_stage(STAGE_EXECUTE);
+                            this.line_num++;
+                            illuminate_prog_lines();
+                            end_of_exec_line();
+                        }
+                        state.op_index_1 = index_1;
+                        state.op_index_2 = index_2;
+                        update_stage(STAGE_SWAP);
+                    });
+                })
+                illuminate_prog_lines();
+            } else if(match = /^create auxiliary array$/.exec(line_to_execute)) {
+                state.prog_vars['[auxiliary array]'] = [];
+                update_desk_check();
+            } else if(match = /^remove the last element from the auxiliary array and place it into ([a-z_]+)$/.exec(line_to_execute)) {
+                if(state.prog_vars['[auxiliary array]'].length == 0) {
+                    display_in_err_box("Attempting to remove an element from empty array");
+                } else {
+                    state.prog_vars[match[1]] = state.prog_vars['[auxiliary array]'].pop();
+                    update_desk_check();
+                }
+            } else if(match = /^append to the auxiliary array (.*)$/.exec(line_to_execute)) {
+                defer_line_increment = true;
+                parse_eval_expr(match[1], v => {
+                    state.prog_vars['[auxiliary array]'].push(v);
+                    state.line_num++;
+                    illuminate_prog_lines();
+                    update_desk_check();
+                    end_of_exec_line();
+                });
+            } else {
+                prog_err('unrecognised line');
+            }
+            if(!defer_line_increment && !state.needs_pausing && state.stage == STAGE_EXECUTE) {
+                state.line_num++;
+                end_of_exec_line();
+                illuminate_prog_lines();
+            }
+        } else if(state.stage == STAGE_COMPARE && next_exec_scheduled) {
+            let v1 = state.arr[state.op_index_1];
+            let v2 = state.arr[state.op_index_2];
+
+            if(state.comp_op == '<') {
+                state.exec_callback(v1 < v2);
+            } else if(state.comp_op == '>') {
+                state.exec_callback(v1 > v2);
+            } else {
+                assert(false, "Unknown or unrecognised comparison operator for array");
+            }
+        } else if(state.stage == STAGE_SWAP && next_exec_scheduled) {
+            let temp = state.arr[state.op_index_1];
+            state.arr[state.op_index_1] = state.arr[state.op_index_2];
+            state.arr[state.op_index_2] = temp;
+
+            state.exec_callback();
+        }
+
+        requestAnimationFrame(frame);
+    }
+
+    function fisher_yates(arr) {
+        for(let i = arr.length - 1; i > 0; i--) {
+            let j = rand_int(0, i + 1);
+            let temp = arr[i];
+            arr[i] = arr[j];
+            arr[j] = temp;
+        }
+    }
+
+    function update_desk_check() {
+        let table_el = document.getElementById("prog-desk-check");
+        for(let var_name of Object.keys(state.prog_vars)) {
+            let row_el = document.querySelector(`#prog-desk-check [data-var_name="${var_name}"]`);
+            if(row_el == null) {
+                row_el = table_el.insertRow(-1);
+                row_el.dataset['var_name'] = var_name;
+                let name_cell = row_el.insertCell(0);
+                name_cell.innerText = var_name;
+                let data_cell = row_el.insertCell(1);
+                data_cell.classList.add('desk_data');
+            }
+            
+            let data_cell = row_el.getElementsByClassName('desk_data')[0];
+            if(state.prog_vars[var_name] instanceof Array) {
+                data_cell.innerText = `[${state.prog_vars[var_name].join(', ')}]`;
+            } else {
+                data_cell.innerText = state.prog_vars[var_name];
+            }
+        }
+    }
+
+    function illuminate_prog_lines() {
+        let active_lines = document.querySelectorAll('#prog-code-listing code.active-line');
+        for(let active_line of active_lines) {
+            active_line.classList.remove('active-line');
+        }
+        let new_line = document.querySelector(`#prog-code-listing code[data-line_num="${state.line_num}"]`);
+        if(new_line != null) {
+            new_line.classList.add("active-line");
+        }
+
+        document.getElementById('stats-info').innerText = `${state.stats.comps} compares, ${state.stats.swaps} swaps, ${state.stats.lines} lines run`;
+        if(state.is_done) {
+            document.getElementById('stats-info').classList.remove('sort-succuss');
+            document.getElementById('stats-info').classList.remove('sort-fail');
+            if(state.sort_succuss) {
+                document.getElementById('stats-info').classList.toggle('sort-succuss');
+            } else {
+                document.getElementById('stats-info').classList.toggle('sort-fail');
+            }
+        }
+    }
+
+    function add_program_text() {
+        let pre_el = document.getElementById('prog-code-listing');
+        pre_el.innerHTML = "";
+        for(let i = 0; i < state.prog_lines.length; ++i) {
+            let code_el = document.createElement('code');
+            code_el.dataset['line_num'] = i;
+            code_el.innerText = state.prog_lines[i] + "\n";
+            pre_el.appendChild(code_el);
+        }
+        illuminate_prog_lines();
+    }
+
+    function generate_new_array() {
+        let array_len_val = document.getElementById('array-len').value;
+        let array_len = new Number(array_len_val);
+        if(isNaN(array_len) || !(2 <= array_len && array_len <= 1500) || (array_len|0) != array_len) {
+            document.getElementById('err-pane').innerText = 'Invalid number of elements in array (must be integer between 2 and 500)';
+            return false;
+        }
+
+        let initial_vals_algorithm = document.getElementById('slct-initial-value').selectedOptions[0].dataset['opt'];
+
+        if(initial_vals_algorithm == 'permutation') {
+            state.arr = [];
+            for(let i = 1; i <= array_len; ++i) {
+                state.arr.push(i);
+            }
+            fisher_yates(state.arr);
+        } else if(initial_vals_algorithm == 'rand') {
+            state.arr = [];
+            for(let i = 1; i <= array_len; ++i) {
+                state.arr.push(rand_int(1, array_len + 1));
+            }
+        } else if(initial_vals_algorithm == 'sort') {
+            state.arr = [];
+            for(let i = 1; i <= array_len; ++i) {
+                state.arr.push(i);
+            }
+        } else if(initial_vals_algorithm == 'reverse') {
+            state.arr = [];
+            for(let i = 1; i <= array_len; ++i) {
+                state.arr.push(array_len - i + 1);
+            }
+        } else if(initial_vals_algorithm == 'custom') {
+            state.arr = [];
+
+            let user_input = prompt("Please enter array (in the form [1, 2, 3]): ");
+            user_input = user_input.replace("[", "").replace("]", "").replace(" ", "").split(",");
+
+            for(let user_number of user_input) {
+                let parsed = parseInt(user_number);
+                if(!isNaN(parsed) && parsed >= 0) {
+                    state.arr.push(parsed);
+                } else {
+                    alert(`${user_input} is not a positive integer.`);
+                }
+            }
+        } else {
+            assert(false, `Invalid initial value algorithm: ${initial_vals_algorithm}`);
+        }
+
+        state.max_element = Math.max(...state.arr);
+
+        return true;
+    }
+
+    function setup_prog_state() {
+        state.line_num = 0;
+        state.stats = {
+            'comps': 0,
+            'lines': 0,
+            'swaps': 0,
+            'aux_array_depth': null
+        };
+        state.prog_vars = {};
+        state.control_stack = [];
+        let sorting_algorithm = document.getElementById('slct-sort-algo').selectedOptions[0].dataset['opt'];
+
+        if(PROGRAMS[sorting_algorithm]) {
+            state.prog_lines = PROGRAMS[sorting_algorithm].trim().split('\n');
+        } else {
+            document.getElementById('err-pane').innerText = 'Sorting algorithm not available. Please choose another or contact Xavier';
+            return false;
+        }
+
+        for(let row of document.querySelectorAll('#prog-desk-check tr')) {
+            if(row.id != "desk-check-header") {
+                row.remove();
+            }
+        }
+        state.speed_between_execs = 100 * ((10 - parseFloat(document.getElementById('speed-slider').value)) / 3) ** 2;
+        state.last_exec = new Date();
+        return true;
+    }
+
+    document.getElementById('reset-btn').addEventListener('click', function(e) {
+        update_stage(STAGE_SETUP);
+    });
+
+    document.getElementById('step-btn').addEventListener('click', e => {
+        if(state.stage == STAGE_PAUSED) {
+            update_stage(STAGE_EXECUTE);
+            state.one_step_only = true;
+        }
+    });
+
+    document.getElementById('go-btn').addEventListener('click', function(e) {
+        document.getElementById('err-pane').innerText = '';
+        if(!generate_new_array()) return;
+        if(!setup_prog_state()) return;
+
+        update_stage(STAGE_PAUSED);
+        add_program_text();
+    });
+
+    document.getElementById('toggle-pause-btn').addEventListener('click', e => {
+        if(state.stage == STAGE_PAUSED) {
+            update_stage(STAGE_EXECUTE);
+        } else {
+            state.needs_pausing = true;
+        }
+    });
+    frame();
+</script>
+</body>
+</html>
