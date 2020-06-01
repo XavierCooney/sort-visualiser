@@ -132,7 +132,8 @@
                 <optgroup label="Other/Weird">
                     <option data-opt="shell">Shell</option>
                     <option data-opt="cocktail">Cocktail</option>
-                    <option data-opt="bogo">Bogo</option>
+                    <option data-opt="bogo">Bogo</option>naive-merge
+                    <option data-opt="naive-merge">Naïve Inplace Merge</option>
                 </optgroup>
             </select>
         </label>
@@ -364,7 +365,9 @@ While length(auxiliary array) > 0
         Set j = start
         While j < end
             If arr[j] < arr[end]
-                Swap arr[i] with arr[j]
+                If i != j
+                    Swap arr[i] with arr[j]
+                EndIf
                 Set i = i + 1
             EndIf
             Set j = j + 1
@@ -412,7 +415,7 @@ While start <= end
 EndWhile
 `,
         'quick-good-pivot': `
-' Quick sort, with startmuto partition scheme, and median-of-three pivot
+' Quick sort, with Lomuto partition scheme, and median-of-three pivot
 Create auxiliary array
 
 Append to the auxiliary array 0
@@ -439,7 +442,9 @@ While length(auxiliary array) > 0
 
         While j < end
             If arr[j] < arr[end]
-                Swap arr[i] with arr[j]
+                If i != j
+                    Swap arr[i] with arr[j]
+                EndIf
                 Set i = i + 1
             EndIf
             Set j = j + 1
@@ -479,6 +484,63 @@ While continue_looping
             Swap arr[i] with arr[j]
             Set i = i - 1
         EndWhile
+    EndIf
+EndWhile
+`,
+        'naive-merge': `
+' Naive (n^2) inplace merge sort (just to look nice)
+
+Create auxiliary array
+
+Append to the auxiliary array 0
+Append to the auxiliary array length(arr) - 1
+Append to the auxiliary array 0
+
+While length(auxiliary array) > 0
+    Remove the last element from the auxiliary array and place it into op
+    Remove the last element from the auxiliary array and place it into end
+    Remove the last element from the auxiliary array and place it into start
+    Set mid = floor((start + end) / 2)
+
+    If op == 0
+        If start < end
+            Append to the auxiliary array start
+            Append to the auxiliary array end
+            Append to the auxiliary array 1
+            Append to the auxiliary array start
+            Append to the auxiliary array mid
+            Append to the auxiliary array 0
+            Append to the auxiliary array mid + 1
+            Append to the auxiliary array end
+            Append to the auxiliary array 0
+        EndIf
+    EndIf
+
+    If op == 1
+        Set left = start
+        Set right = mid + 1
+        Set needs_work = arr[mid] > arr[right]
+
+        If needs_work
+            While left <= mid And right <= end
+                Set select_from_right = true
+                If arr[left] < arr[right]
+                    Set left = left + 1
+                    Set select_from_right = false
+                EndIf
+
+                If select_from_right
+                    Set swap_index = left
+                    While swap_index <= mid
+                        Swap arr[swap_index] with arr[mid + 1]
+                        Set swap_index = swap_index + 1
+                    EndWhile
+                    Set left = left + 1
+                    Set right = right + 1
+                    Set mid = mid + 1
+                EndIf
+            EndWhile
+        EndIf
     EndIf
 EndWhile
 `
@@ -894,9 +956,10 @@ EndWhile
         }
 
         document.getElementById('stats-info').innerText = `${state.stats.comps} compares, ${state.stats.swaps} swaps, ${state.stats.lines} lines run`;
+
+        document.getElementById('stats-info').classList.remove('sort-succuss');
+        document.getElementById('stats-info').classList.remove('sort-fail');
         if(state.is_done) {
-            document.getElementById('stats-info').classList.remove('sort-succuss');
-            document.getElementById('stats-info').classList.remove('sort-fail');
             if(state.sort_succuss) {
                 document.getElementById('stats-info').classList.toggle('sort-succuss');
             } else {
@@ -981,6 +1044,8 @@ EndWhile
         };
         state.prog_vars = {};
         state.control_stack = [];
+        state.is_done = false;
+        state.sort_succuss = false;
         let sorting_algorithm = document.getElementById('slct-sort-algo').selectedOptions[0].dataset['opt'];
 
         if(PROGRAMS[sorting_algorithm]) {
