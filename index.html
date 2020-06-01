@@ -60,7 +60,7 @@
             line-height: 150%;
             border-radius: 25px;
             float: left;
-            min-width: 68%;
+            min-width: 55%;
         }
         #prog-info {
             display: flex;
@@ -132,8 +132,11 @@
                 <optgroup label="Other/Weird">
                     <option data-opt="shell">Shell</option>
                     <option data-opt="cocktail">Cocktail</option>
-                    <option data-opt="bogo">Bogo</option>naive-merge
+                    <option data-opt="bogo">Bogo</option>
                     <option data-opt="naive-merge">Naïve Inplace Merge</option>
+                    <option data-opt="odd-even">Odd-Even</option>
+                    <option data-opt="stooge">Stooge</option>
+                    <option data-opt="slow">Slow</option>
                 </optgroup>
             </select>
         </label>
@@ -177,6 +180,7 @@
             <tr id="desk-check-header">
                 <th>Name</th>
                 <th>Value</th>
+                <th title="Draw the variable as an index on the array viewer">Show as index</th>
             </tr>
         </table>
     </div>
@@ -234,16 +238,16 @@ EndWhile
 ' Selection Sort
 Set i = 0
 While i < length(arr)
-    Set lowerst_index_so_far = i
+    Set lowest_index_so_far = i
     Set j = i + 1
     While j < length(arr)
-        If arr[j] < arr[lowerst_index_so_far]
+        If arr[j] < arr[lowest_index_so_far]
             ' We've found a new minimum!
-            Set lowerst_index_so_far = j
+            Set lowest_index_so_far = j
         EndIf
         Set j = j + 1
     EndWhile
-    Swap arr[lowerst_index_so_far] with arr[i]
+    Swap arr[lowest_index_so_far] with arr[i]
     Set i = i + 1
 EndWhile
 `,
@@ -430,14 +434,16 @@ While length(auxiliary array) > 0
         Set j = start
 
         Set mid = floor((start + end) / 2)
-        If arr[mid] < arr[start]
-            Swap arr[start] with arr[mid]
-        EndIf
-        If arr[end] < arr[start]
-            Swap arr[start] with arr[end]
-        EndIf
-        If arr[mid] < arr[end]
-            Swap arr[mid] with arr[end]
+        if end - start > 6
+            If arr[mid] < arr[start]
+                Swap arr[start] with arr[mid]
+            EndIf
+            If arr[end] < arr[start]
+                Swap arr[start] with arr[end]
+            EndIf
+            If arr[mid] < arr[end]
+                Swap arr[mid] with arr[end]
+            EndIf
         EndIf
 
         While j < end
@@ -543,6 +549,96 @@ While length(auxiliary array) > 0
         EndIf
     EndIf
 EndWhile
+`,
+        'odd-even': `
+' Odd-even sort, an interesting looking n^2 algorithm
+
+Set not_sorted = true
+While not_sorted
+    Set not_sorted = false
+    Set i = 1
+    While i < length(arr) - 1
+        If arr[i] > arr[i + 1]
+            Swap arr[i] with arr[i + 1]
+            Set not_sorted = true
+        EndIf
+        Set i = i + 2
+    EndWhile
+    Set i = 0
+    While i < length(arr) - 1
+        If arr[i] > arr[i + 1]
+            Swap arr[i] with arr[i + 1]
+            Set not_sorted = true
+        EndIf
+        Set i = i + 2
+    EndWhile
+EndWhile
+`,
+        'stooge': `
+' Stooge Sort (pretty funny), complexity is ~O(n^2.7095)
+
+Create auxiliary array
+
+Append to the auxiliary array 0
+Append to the auxiliary array length(arr) - 1
+
+While length(auxiliary array) > 0
+    Remove the last element from the auxiliary array and place it into end
+    Remove the last element from the auxiliary array and place it into start
+
+    If arr[start] > arr[end]
+        Swap arr[start] with arr[end]
+    EndIf
+
+    If (1 + end - start) > 2
+        Set t = floor((1 + end - start) / 3)
+
+        Append to the auxiliary array start
+        Append to the auxiliary array end - t
+        Append to the auxiliary array start + t
+        Append to the auxiliary array end
+        Append to the auxiliary array start
+        Append to the auxiliary array end - t
+    EndIf
+EndWhile
+`,
+        'slow': `
+' Slowsort (nonpolynomial)
+
+Create auxiliary array
+
+Append to the auxiliary array 0
+Append to the auxiliary array length(arr) - 1
+Set neg_one = 0 - 1
+
+While length(auxiliary array) > 0
+    Remove the last element from the auxiliary array and place it into end
+    Remove the last element from the auxiliary array and place it into start
+    
+    If start >= 0 And (start < end)
+        Set m = floor((start + end) / 2)
+
+        Append to the auxiliary array start
+        Append to the auxiliary array end - 1
+
+        Append to the auxiliary array neg_one - m
+        Append to the auxiliary array neg_one - end
+
+        Append to the auxiliary array m + 1
+        Append to the auxiliary array end
+
+        Append to the auxiliary array start
+        Append to the auxiliary array m
+    EndIf
+
+    If start < 0
+        Set start = neg_one - start
+        Set end = neg_one - end
+        If arr[start] > arr[end]
+            Swap arr[start] with arr[end]
+        EndIf
+    EndIf
+EndWhile
 `
     };
 
@@ -635,9 +731,11 @@ EndWhile
             });
         } else if(match = /^\(([^)]*)\)$/.exec(expr)) {
             parse_eval_expr(match[1], callback);
-        } else if(match = /^floor\(\(([^)]*)\) \/ 2\)$/.exec(expr)) {
-            parse_eval_expr(match[1], v => {
-                callback(Math.floor(v / 2));
+        } else if(match = /^floor\(\(([^)]*)\) \/ ([0-9]+)\)$/.exec(expr)) {
+            parse_eval_expr(match[1], v_1 => {
+                parse_eval_expr(match[2], v_2 => {
+                    callback(Math.floor(v_1 / v_2));
+                })
             });
         } else if(match = /^rand_int\(([^,]*), ([^)]*)\)$/.exec(expr)) {
             parse_eval_expr(match[1], v_1 => {
@@ -762,6 +860,17 @@ EndWhile
                     }
                     let rect_height = state.arr[i] / (state.max_element + 1) * (HEIGHT - 5) + 5;
                     ctx.fillRect(i * width_per_col + sliver_width, HEIGHT - rect_height, width_per_col - 2 * sliver_width, HEIGHT);
+                }
+
+                for(let var_name in state.index_views) {
+                    if(state.index_views[var_name]) {
+                        let value = state.prog_vars[var_name];
+                        if(typeof value === "number") {
+                            ctx.fillStyle = "red";
+                            let x_coord = (value + 0.5) * width_per_col;
+                            ctx.fillRect(x_coord - 1, -1, 2, HEIGHT + 1);
+                        }
+                    }
                 }
                 ctx.restore();
             }
@@ -934,9 +1043,19 @@ EndWhile
                 name_cell.innerText = var_name;
                 let data_cell = row_el.insertCell(1);
                 data_cell.classList.add('desk_data');
+                let button_cell = row_el.insertCell(2);
+                let button = document.createElement("input");
+                button.type = "checkbox";
+                button_cell.appendChild(button);
+                button.classList.add('desk_index_button');
+                button.addEventListener('change', e => {
+                    state.index_views[var_name] = button.checked;
+                });
             }
             
             let data_cell = row_el.getElementsByClassName('desk_data')[0];
+            let checkbox = row_el.getElementsByClassName('desk_index_button')[0];
+            checkbox.disabled = typeof state.prog_vars[var_name] !== "number";
             if(state.prog_vars[var_name] instanceof Array) {
                 data_cell.innerText = `[${state.prog_vars[var_name].join(', ')}]`;
             } else {
@@ -1043,6 +1162,7 @@ EndWhile
             'aux_array_depth': null
         };
         state.prog_vars = {};
+        state.index_views = {};
         state.control_stack = [];
         state.is_done = false;
         state.sort_succuss = false;
